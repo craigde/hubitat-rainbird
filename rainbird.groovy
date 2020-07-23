@@ -2,6 +2,7 @@
 *  Copyright 2020 craigde
 *
 *  Contributors:
+*  jbarrancos - Thanks for documenting the Rainbird API calls and encryption routine - https://github.com/jbarrancos/pyrainbird project. this was a great reference to speed development.
 *
 *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
 *  in compliance with the License. You may obtain a copy of the License at:
@@ -18,10 +19,17 @@
 *
 *  Date: 2020-07-11
 *
+*  for use with HUBITAT
 *
-* for use with HUBITAT
-*
-* features:
+*  features: Supports the following so far
+*    Advance Station - Run the passed station number
+*    Current Date - Return the wifi current date
+*    Current Time - Return the wifi current time
+*    Current Irrigation State - Returns current watering state
+*    Rain Delay Get - Returns current rain delay
+*    Rain Delay Set - Sets rain delay
+*    Model and Version - Returns model and version of wifi controller
+*    Serial Number - Return the wifi controller serial number
 *
 ***********************************************************************************************************************/
 
@@ -60,33 +68,37 @@ metadata    {
         attribute "currentTime", "string"
         attribute "currentDate", "string"
         attribute "rainDelay", "string"
-        //attribute "controllerOn", "string"
-        //attribute "rainDelay","number"
         attribute "watering", "boolean"
+        //attribute "controllerOn", "string"
 
+        //currently implemented commands
         command "ModelAndVersionRequest"
-//        command "AvailableStationsRequest", ["number"]
- //       command "CommandSupportRequest", ["sring"]
         command "SerialNumberRequest"
         command "CurrentTimeRequest"
         command "CurrentDateRequest"
- //       command "WaterBudgetRequest", ["number"]
-  //      command "ZonesSeasonalAdjustFactorRequest"
-   //     command "CurrentRunTimeRequest", ["number"]
-  //      command "CurrentRainSensorStateRequest"
-  //      command "CurrentStationsActiveRequest", ["number"]
-  //      command "ManuallyRunProgramRequest", ["number"]
-  //      command "ManuallyRunStationRequest", ["number", "number"]
-   //     command "TestStationsRequest", ["number"]
-       command "StopIrrigationRequest"
+        command "StopIrrigationRequest"
         command "RainDelayGetRequest"
         command "RainDelaySetRequest", ["number"]
-       command "AdvanceStationRequest", ["number"]
-       command "CurrentIrrigationStateRequest"
-   //     command "CurrentControllerStateSet", ["number"]
-    //    command "ControllerEventTimestampRequest", ["number"]
-    //    command "StackManuallyRunStationRequest", ["number"]
-    //    command "CombinedControllerStateRequest"
+        command "AdvanceStationRequest", ["number"]
+        command "CurrentIrrigationStateRequest"
+
+ 
+        //To be implemented
+        //command "WaterBudgetRequest", ["number"]
+        //command "ZonesSeasonalAdjustFactorRequest"
+        //command "CurrentRunTimeRequest", ["number"]
+        //command "CurrentRainSensorStateRequest"
+        //command "CurrentStationsActiveRequest", ["number"]
+        //command "ManuallyRunProgramRequest", ["number"]
+        //command "ManuallyRunStationRequest", ["number", "number"]
+        //command "TestStationsRequest", ["number"]
+        
+        //command "AvailableStationsRequest", ["number"]
+        //command "CommandSupportRequest", ["sring"]
+        //command "CurrentControllerStateSet", ["number"]
+        //command "ControllerEventTimestampRequest", ["number"]
+        //command "StackManuallyRunStationRequest", ["number"]
+        //command "CombinedControllerStateRequest"
   }
     
 }
@@ -101,14 +113,15 @@ preferences {
     section("Polling interval (minutes):") {
         input "minutes", "number", required: true, title: "How often?"
     }
-  
     section("Collect Additional Debug information") {
-           input "isDebug", "bool", title:"Debug mode", required:true, defaultValue:false
+        input "isDebug", "bool", title:"Debug mode", required:true, defaultValue:false
     }    
 }
 
 def initialize() {
     ModelAndVersionRequest()
+    CurrentTimeRequest ()
+    CurrentDateRequest ()
 }
 
 void installed() {
@@ -137,7 +150,6 @@ def ModelAndVersionRequest () {
     else {
        log.debug "ModelAndVersionRequest Fail: ${response.result.data}"
     }
-        
 }
 
 def SerialNumberRequest () {
@@ -275,7 +287,6 @@ def CurrentIrrigationStateRequest () {
 
 
 def AdvanceStationRequest (_station) {
- 
     //	"AdvanceStationRequest": {"command": "42", "parameter": 0, "response": "01", "length": 2},
     _station=_station.toString()
     if (_station.isNumber()) {
@@ -349,11 +360,9 @@ def SendData(strSendCommand, intLength) {
        def json = slurper.parseText(temp2)
        
        return json
-   
 }
 
 def encrypt(def message,  def password) {
-    
     //Deal with passed password value
     //First lets derive a shared SHA256 key from the password and make it a byte array - bKeyHash
     MessageDigest keydigest = MessageDigest.getInstance("SHA-256");
@@ -393,7 +402,6 @@ def encrypt(def message,  def password) {
     def byte[] bResult = [bMessageHash, IVKey.getBytes("UTF-8"),bEncryptedMessage].flatten()
     
     return bResult
-     
 }   
 
 def decrypt (def baCypher, def strPassword) {
@@ -445,7 +453,6 @@ def add_padding(data) {
 
 
 def giveMeKey(length){
-
     String alphabet = (('A'..'N')+('P'..'Z')+('a'..'k')+('m'..'z')+('2'..'9')).join() 
     key = new Random().with {
           (1..length).collect { alphabet[ nextInt( alphabet.length() ) ] }.join()
