@@ -33,12 +33,13 @@
 *
 ***********************************************************************************************************************/
 
-public static String version()      {  return "v0.90"  }
+public static String version()      {  return "v0.91"  }
 
 /***********************************************************************************************************************
 *
 * Version 0.9
 *   7/11/2020: 0.9 - intial version of driver. Underlying encryption and comms complete. First set of commands complete. Still need to complete command set. 
+*   8/17/2020: 0.91 - Added additonal commands and fixed some issues
 */
 
 //import groovy.transform.Field
@@ -90,10 +91,10 @@ metadata    {
         //command "CurrentRainSensorStateRequest"
         //command "CurrentStationsActiveRequest", ["number"]
         //command "ManuallyRunProgramRequest", ["number"]
-        //command "ManuallyRunStationRequest", ["number", "number"]
+        command "ManuallyRunStationRequest", ["number", "number"]
         //command "TestStationsRequest", ["number"]
         
-        //command "AvailableStationsRequest", ["number"]
+        command "AvailableStationsRequest", ["number"]
         //command "CommandSupportRequest", ["sring"]
         //command "CurrentControllerStateSet", ["number"]
         //command "ControllerEventTimestampRequest", ["number"]
@@ -134,6 +135,7 @@ void updated() {
 }
     
 def ModelAndVersionRequest () {
+    // "ModelAndVersionRequest" : {"command" : "02", "response": "82",  "length": 1},
     response = SendData ("02", 1)
     //"82": {"length": 5, "type": "ModelAndVersionResponse", "modelID": {"position": 2, "length": 4},"protocolRevisionMajor": {"position": 6, "length": 2},"protocolRevisionMinor": {"position": 8, "length": 2}},
     if (isDebug) { log.debug "Json Data: ${response.result.data}" }
@@ -153,6 +155,7 @@ def ModelAndVersionRequest () {
 }
 
 def SerialNumberRequest () {
+    // "SerialNumberRequest" : {"command" : "05", "response" : "85", "length" : 1},
     response = SendData ("05", 1)
     //"85": {"length": 9, "type": "SerialNumberResponse", "serialNumber": {"position": 2, "length": 16}},
     if (isDebug) { log.debug "Json Data: ${response.result.data}" }
@@ -168,6 +171,7 @@ def SerialNumberRequest () {
 
 
 def CurrentTimeRequest () {
+    // "CurrentTimeRequest" : {"command" : "10", "response" : "90", "length" : 1},
     response = SendData ("10", 1)
     //"90": {"length": 4, "type": "CurrentTimeResponse", "hour": {"position": 2, "length": 2}, "minute": {"position": 4, "length": 2}, "second": {"position": 6, "length": 2}},
 	if (isDebug) { log.debug "Json Data: ${response.result.data}" }
@@ -187,6 +191,7 @@ def CurrentTimeRequest () {
 }
 
 def CurrentDateRequest () {
+    // "CurrentDateRequest" : {"command" : "12", "response" : "92", "length" : 1},
     response = SendData ("12", 1)
     //"92": {"length": 4, "type": "CurrentDateResponse", "day": {"position": 2, "length": 2}, "month": {"position": 4, "length": 1}, "year": {"position": 5, "length": 3}},
 	if (isDebug) { log.debug "Json Data: ${response.result.data}" }
@@ -221,6 +226,7 @@ def StopIrrigationRequest () {
 }
 
 def RainDelayGetRequest () {
+    //"RainDelayGetRequest" : {"command" : "36", "response" : "B6", "length" : 1}
     response = SendData ("36", 1)
     //"B6": {"length": 3, "type": "RainDelaySettingResponse", "delaySetting": {"position": 2, "length": 4}},
 	if (isDebug) { log.debug "Json Data: ${response.result.data}" }
@@ -238,16 +244,17 @@ def RainDelayGetRequest () {
 }
 
 def RainDelaySetRequest (_rainDelay) {
+    // "RainDelaySetRequest" : {"command" : "37", "parameter" : 0, "response" : "01", "length" : 3},
     _rainDelay=_rainDelay.toString()
     if (_rainDelay.isNumber()) {
         _rainDelay = Integer.parseInt(_rainDelay)
        
-       if (_rainDelay < 9) {
+       if (_rainDelay < 15) {
            _rainDelayHex="000"+Integer.toHexString(_rainDelay)
        }
        else {
-       _rainDelayHex="00${_rainDelay}"
-        
+            log.debug "Invalid raindelay: ${_rainDelay} - Must be less than 15 days"
+            return false 
        }
        log.debug "_rainDelayHex ${_rainDelayHex}"
        log.debug "sending: 37${_rainDelayHex}"
@@ -269,13 +276,11 @@ def RainDelaySetRequest (_rainDelay) {
 }
 
 def CurrentIrrigationStateRequest () {
-  
     //"CurrentIrrigationStateRequest": {"command": "48", "response": "C8", "length": 1},
-       
     response = SendData ("48", 1)
+
     //	"C8": {"length": 2, "type": "CurrentIrrigationStateResponse", "irrigationState": {"position": 2, "length": 2}},
-	
-    if (response.result.data.reverse().endsWith("8C")) {
+	if (response.result.data.reverse().endsWith("8C")) {
        def currentIrrigationState = Integer.parseInt(response.result.data.substring(2,4),16)
        log.debug "currentIrrigationState: ${currentIrrigationState}"  
     }
@@ -292,30 +297,89 @@ def AdvanceStationRequest (_station) {
     if (_station.isNumber()) {
         _station = Integer.parseInt(_station)
        
-       if (_station < 9) {
+       if (_station < 16) {
            _station="000"+Integer.toHexString(_station)
        }
        else {
-       _rainDelayHex="00${_rainDelay}"
+       _station="00${_station}"
         
        }
        log.debug "_stationHex ${_stationHex}"
        log.debug "sending: 42${_stationHex}"
-       response = SendData ("42${_stationHex}", 3)
+       response = SendData ("42${_stationHex}", 2)
 	   // "01": {"length": 2, "type": "AcknowledgeResponse", "commandEcho": {"position": 2, "length": 2}},
 
        if (response.result.data.reverse().endsWith("10")) {
        }
        else {
-          log.debug "RainDelaySetRequest Fail: ${response.result.data}"
+          log.debug "AdvanceStationRequest Fail: ${response.result.data}"
        }
     }
     else {
-       log.debug "Invalid RainDelay: ${_rainDelay}"
+       log.debug "Invalid Station: ${_station}"
        return false 
     }
 }
 
+def AvailableStationsRequest (_station) {
+   //AvailableStationsRequest" : {"command" : "03", "parameter" : 0, "response": "83", "length" : 2}
+    
+   //  "83" : {"length" : 6, "type" : "AvailableStationsResponse", "pageNumber" : {"position" : 2, "length" : 2}, "setStations" : {"position" : 4, "length" : 8}}
+ 
+}
+
+def ManuallyRunStationRequest (_station, _minutes) {
+    // "ManuallyRunStationRequest" : {"command" : "39", "parameterOne" : 0, "parameterTwo" : 0, "response" : "01", "length" : 4},
+    
+    _station=_station.toString()
+    if (_station.isNumber()) {
+        _station = Integer.parseInt(_station)
+       
+       if (_station < 16) {
+           _stationHex="000"+Integer.toHexString(_station)
+       }
+       else {
+       _stationHex="00${_station}" 
+       }
+    }
+    else {
+       log.debug "Invalid Station: ${_station}"
+       return false 
+    }
+        
+    _minutes=_minutes.toString()
+    if (_minutes.isNumber()) {
+        _minutes = Integer.parseInt(_minutes)
+       
+       if (_minutes < 16) {
+           _minutesHex="0"+Integer.toHexString(_station)
+       }
+       else {
+            if (_minutes>100) {
+               log.debug "Invalid Minutes: ${_station} - Must be <=100"
+               return false 
+           }
+        _minutesHex="${_minutes}"
+       }
+    }
+    else {
+      log.debug "Invalid Minutes: ${_minutes}"
+       return false 
+   }     
+        
+       log.debug "_stationHex ${_stationHex}"
+       log.debug "_minutesHex ${_minutesHex}"
+       log.debug "sending: 39${_stationHex}${_minutesHex}"
+       response = SendData ("39${_stationHex}${_minutesHex}", 4)
+	   // "01": {"length": 2, "type": "AcknowledgeResponse", "commandEcho": {"position": 2, "length": 2}},
+
+       if (response.result.data.reverse().endsWith("10")) {
+       }
+      else {
+       log.debug "ManuallyRunStationRequest Fail: ${response.result.data}"
+     }
+   }
+//}
 
 def SendData(strSendCommand, intLength) {
     long request_id = Math.floor((new Date()).getTime()/1000);
