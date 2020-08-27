@@ -1,0 +1,17 @@
+{
+  "packageName": "Rainbird Sprinkler Controller Driver",
+  "author": "Craig Dewar",
+  "version": "1.00",
+  "minimumHEVersion": "2.1.0",
+  "dateReleased": "2020-08-27",
+  "apps" : [],
+  "drivers": [
+    {
+      "id": "f9be7125-468d-4747-b402-012182f99e2d",
+      "name": "Rainbird Sprinkler Controller Driver",
+      "namespace": "craigde",
+      "location": "https://raw.githubusercontent.com/craigde/hubitat-rainbird/master/rainbird.groovy",
+      "required": false
+    }
+  ]
+}
