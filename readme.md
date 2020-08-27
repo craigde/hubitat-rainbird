@@ -25,7 +25,6 @@ Now there are a few simple preferences you need to setup. Open the device you cr
 
 * "Where?" - Enter the IP address of your Rainbird WiFi module. If you don't know what this is you can find it in the Rainbird mobile app under "Controller Settings | Network Info"
 * "Password" - Enter the password of for your Rainbird WiFi module.
-* "How often" - How often to poll in
 * "Debug Mode" - Enbale this to generate troubleshooting information in the hubitat log. If the device is working well turn it off so it does not fill your log.
 
 Click "Save Preferences"
