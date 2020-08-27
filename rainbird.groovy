@@ -104,9 +104,6 @@ preferences {
     section("Sprinkler Password (string):") {
         input "SprinklerPassword", "string", required: true, title: "Password?"
     }
-    section("Default Program:") {
-        input "DefaultProgram", "number", required: true, title: "Default Program for switch / valve on events?"
-    }
     section("Collect Additional Debug information") {
         input "isDebug", "bool", title:"Debug mode", required:true, defaultValue:false
     }    
@@ -133,12 +130,12 @@ def refresh() {
 }
 
 def on() {
-    ManuallyRunProgramRequest (DefaultProgram)
+    ManuallyRunProgramRequest ()
     CurrentIrrigationStateRequest()
 }
 
 def open() {
-    ManuallyRunProgramRequest (DefaultProgram)
+    ManuallyRunProgramRequest ()
     CurrentIrrigationStateRequest()
 }
 
