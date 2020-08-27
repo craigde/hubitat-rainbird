@@ -11,7 +11,7 @@
       "name": "Rainbird Sprinkler Controller Driver",
       "namespace": "craigde",
       "location": "https://raw.githubusercontent.com/craigde/hubitat-rainbird/master/rainbird.groovy",
-      "required": false
+      "required": true
     }
   ]
 }
