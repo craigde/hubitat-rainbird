@@ -33,16 +33,16 @@
 *
 ***********************************************************************************************************************/
 
-public static String version()      {  return "v0.91"  }
+public static String version()      {  return "v0.92"  }
 
 /***********************************************************************************************************************
 *
 * Version 0.9
-*   7/11/2020: 0.9 - intial version of driver. Underlying encryption and comms complete. First set of commands complete. Still need to complete command set. 
+*   7/11/2020: 0.9 - Intial version of driver. Underlying encryption and comms complete. First set of commands complete. Still need to complete command set. 
 *   8/17/2020: 0.91 - Added additonal commands and fixed some issues
+*   8/27/2020: 0.92 - Fixed watering state issue
 */
 
-//import groovy.transform.Field
 import java.security.MessageDigest;
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
@@ -55,11 +55,7 @@ metadata    {
      
         capability "Refresh"
         capability "Switch"
-        capability "Actuator"
         capability "Valve"
-        capability "Sensor"
-        capability "Polling"
-        capability "Health Check"
 
         attribute "modelID", "string"
         attribute "hardwareDesc", "string"
@@ -70,7 +66,6 @@ metadata    {
         attribute "currentDate", "string"
         attribute "rainDelay", "string"
         attribute "watering", "boolean"
-        //attribute "controllerOn", "string"
 
         //currently implemented commands
         command "ModelAndVersionRequest"
@@ -79,29 +74,27 @@ metadata    {
         command "CurrentDateRequest"
         command "StopIrrigationRequest"
         command "RainDelayGetRequest"
-        command "RainDelaySetRequest", ["number"]
-        command "AdvanceStationRequest", ["number"]
+        command "RainDelaySetRequest", ["number of days"]
+        command "AdvanceStationRequest", ["station number"]
         command "CurrentIrrigationStateRequest"
-
- 
-        //To be implemented
+        command "ManuallyRunStationRequest", ["station number", "number of minutes"]
+        command "AvailableStationsRequest", ["station number"]
+        command "ManuallyRunProgramRequest", ["program number"]
+        command "CurrentStationsActiveRequest", ["station number"]
+        command "CombinedControllerStateRequest"
+        
+        //Unimplemented Commands
         //command "WaterBudgetRequest", ["number"]
         //command "ZonesSeasonalAdjustFactorRequest"
         //command "CurrentRunTimeRequest", ["number"]
         //command "CurrentRainSensorStateRequest"
-        //command "CurrentStationsActiveRequest", ["number"]
-        //command "ManuallyRunProgramRequest", ["number"]
-        command "ManuallyRunStationRequest", ["number", "number"]
         //command "TestStationsRequest", ["number"]
-        
-        command "AvailableStationsRequest", ["number"]
         //command "CommandSupportRequest", ["sring"]
         //command "CurrentControllerStateSet", ["number"]
         //command "ControllerEventTimestampRequest", ["number"]
         //command "StackManuallyRunStationRequest", ["number"]
-        //command "CombinedControllerStateRequest"
+
   }
-    
 }
  
 preferences {
@@ -111,8 +104,8 @@ preferences {
     section("Sprinkler Password (string):") {
         input "SprinklerPassword", "string", required: true, title: "Password?"
     }
-    section("Polling interval (minutes):") {
-        input "minutes", "number", required: true, title: "How often?"
+    section("Default Program:") {
+        input "DefaultProgram", "number", required: true, title: "Default Program for switch / valve on events?"
     }
     section("Collect Additional Debug information") {
         input "isDebug", "bool", title:"Debug mode", required:true, defaultValue:false
@@ -120,9 +113,7 @@ preferences {
 }
 
 def initialize() {
-    ModelAndVersionRequest()
-    CurrentTimeRequest ()
-    CurrentDateRequest ()
+    refresh()
 }
 
 void installed() {
@@ -134,6 +125,33 @@ void updated() {
     initialize()
 }
     
+def refresh() {
+    ModelAndVersionRequest()
+    CurrentTimeRequest ()
+    CurrentDateRequest ()
+    CurrentIrrigationStateRequest()
+}
+
+def on() {
+    ManuallyRunProgramRequest (DefaultProgram)
+    CurrentIrrigationStateRequest()
+}
+
+def open() {
+    ManuallyRunProgramRequest (DefaultProgram)
+    CurrentIrrigationStateRequest()
+}
+
+def off() {
+    StopIrrigationRequest()  
+    CurrentIrrigationStateRequest()
+}
+
+def close() {
+    StopIrrigationRequest()  
+    CurrentIrrigationStateRequest()
+}
+
 def ModelAndVersionRequest () {
     // "ModelAndVersionRequest" : {"command" : "02", "response": "82",  "length": 1},
     response = SendData ("02", 1)
@@ -168,7 +186,6 @@ def SerialNumberRequest () {
        log.debug "SerialNumberRequest Fail: ${response.result.data}"
     }
 }
-
 
 def CurrentTimeRequest () {
     // "CurrentTimeRequest" : {"command" : "10", "response" : "90", "length" : 1},
@@ -210,11 +227,72 @@ def CurrentDateRequest () {
     }
 }
 
+def CombinedControllerStateRequest () {
+    // 		"CombinedControllerStateRequest": {"command": "4C", "response": "CC","length": 1 }
+    response = SendData ("4C", 1)
+    
+	/*"CC": {"length": 16, "type": "CombinedControllerStateResponse", "hour": {"position": 2, "length": 2},"minute": {"position": 4, "length": 2},
+			"second": {"position": 6, "length": 2}, "day": {"position": 8, "length": 2},"month": {"position": 10, "length": 1},"year": {"position": 11, "length": 3},
+			"delaySetting": {"position": 14, "length": 4}, "sensorState": {"position": 18, "length": 2},"irrigationState": {"position": 20, "length": 2},
+			"seasonalAdjust": {"position": 22, "length": 4},"remainingRuntime": {"position": 26, "length": 4}, "activeStation": {"position": 30, "length": 2}}
+	*/
+    
+    if (isDebug) { log.debug "CombinedControllerStateRequest - Json Data: ${response.result.data}" }
+    
+    if (response.result.data.reverse().endsWith("CC")) {
+      
+      //def currentDateDay = Integer.parseInt(response.result.data.substring(2,4),16) 
+      //def currentDateMonth = Integer.parseInt(response.result.data.substring(4,5),16)
+      //def currentDateYear = Integer.parseInt(response.result.data.substring(5,8),16)
+              
+      //state.currentDate = "${currentDateDay}${currentDateMonth}${currentDateYear}"
+      //sendEvent(name: "currentDate", value: state.currentDate, displayed: true);
+    }
+    else {
+       log.debug "CombinedControllerStateRequest Fail: ${response.result.data}"
+    }
+}
+
+def CurrentStationsActiveRequest (_station) {
+    // 	"CurrentStationsActiveRequest": {"command": "3F", "parameter": 0, "response": "BF", "length": 2},
+    
+    if (_station == null){
+        _station = 0
+    }
+    _stationHex = convert(_station)
+    if (_stationHex == false) {
+       log.debug "CurrentStationsActiveRequest - Invalid Station: ${_station}"
+       return false 
+    }
+       
+    response = SendData ("3F${_stationHex}", 2)
+     
+	// "BF": {"length": 6, "type": "CurrentStationsActiveResponse", "pageNumber": {"position": 2, "length": 2}, "activeStations": {"position": 4, "length": 8}},
+    if (isDebug) { log.debug "CurrentStationsActiveRequest - Json Data: ${response.result.data}" }
+    
+    if (response.result.data.reverse().endsWith("FB")) {
+    //received expected response
+       temp = Integer.parseInt(response.result.data.substring(5,8),16)
+       if (isdedug) { log.debug "CurrentStationsActiveRequest - Return: ${temp}" }
+     
+       if (temp == 0) {       
+          state.watering = false
+       }
+       else {
+          state.watering = true
+       }      
+       sendEvent(name: "watering", value: state.watering, displayed: true);
+    }
+    else {
+       log.debug "CurrentStationsActiveRequest Fail: ${response.result.data}"
+    }
+}
+
 def StopIrrigationRequest () {
     //"StopIrrigationRequest": {"command": "40", "response": "01", "length": 1},
     response = SendData ("40", 1)
 	//	"01": {"length": 2, "type": "AcknowledgeResponse", "commandEcho": {"position": 2, "length": 2}},
-	if (isDebug) { log.debug "Json Data: ${response.result.data}" }
+	if (isDebug) { log.debug "StopIrrigationRequest - Json Data: ${response.result.data}" }
     
     if (response.result.data.reverse().endsWith("10")) {
       state.watering = false
@@ -229,7 +307,7 @@ def RainDelayGetRequest () {
     //"RainDelayGetRequest" : {"command" : "36", "response" : "B6", "length" : 1}
     response = SendData ("36", 1)
     //"B6": {"length": 3, "type": "RainDelaySettingResponse", "delaySetting": {"position": 2, "length": 4}},
-	if (isDebug) { log.debug "Json Data: ${response.result.data}" }
+	if (isDebug) { log.debug "RainDelayGetRequest - Json Data: ${response.result.data}" }
     
     if (response.result.data.reverse().endsWith("6B")) {
        def currentRainDelay = Integer.parseInt(response.result.data.substring(2,6),16)
@@ -245,105 +323,84 @@ def RainDelayGetRequest () {
 
 def RainDelaySetRequest (_rainDelay) {
     // "RainDelaySetRequest" : {"command" : "37", "parameter" : 0, "response" : "01", "length" : 3},
-    _rainDelay=_rainDelay.toString()
-    if (_rainDelay.isNumber()) {
-        _rainDelay = Integer.parseInt(_rainDelay)
-       
-       if (_rainDelay < 15) {
-           _rainDelayHex="000"+Integer.toHexString(_rainDelay)
-       }
-       else {
-            log.debug "Invalid raindelay: ${_rainDelay} - Must be less than 15 days"
-            return false 
-       }
-       log.debug "_rainDelayHex ${_rainDelayHex}"
-       log.debug "sending: 37${_rainDelayHex}"
-       response = SendData ("37${_rainDelayHex}", 3)
-	   // "01": {"length": 2, "type": "AcknowledgeResponse", "commandEcho": {"position": 2, "length": 2}},
+    if (_rainDelay == null){
+        _rainDelay = 0
+    }
+    _rainDelayHex = convert(_rainDelay)
+    if (_rainDelayHex == false) {
+       log.debug "RainDelaySetRequest - Invalid RainDelay: ${_rainDelay}"
+       return false 
+    }
+        
+    log.debug "_rainDelayHex ${_rainDelayHex}"
+    log.debug "sending: 37${_rainDelayHex}"
 
-       if (response.result.data.reverse().endsWith("10")) {
-          state.rainDelay = _rainDelay                                  
-          sendEvent(name: "rainDelay", value: state.rainDelay, displayed: true)
-       }
-       else {
-          log.debug "RainDelaySetRequest Fail: ${response.result.data}"
-       }
+    response = SendData ("37${_rainDelayHex}", 3)
+	// "01": {"length": 2, "type": "AcknowledgeResponse", "commandEcho": {"position": 2, "length": 2}},
+
+    if (response.result.data.reverse().endsWith("10")) {
+       state.rainDelay = _rainDelay                                  
+       sendEvent(name: "rainDelay", value: state.rainDelay, displayed: true)
     }
     else {
-       log.debug "Invalid RainDelay: ${_rainDelay}"
-       return false 
+         log.debug "RainDelaySetRequest Fail: ${response.result.data}"
     }
 }
 
 def CurrentIrrigationStateRequest () {
-    //"CurrentIrrigationStateRequest": {"command": "48", "response": "C8", "length": 1},
+    /* Issue - My Rainbird controller returns state - 1 regardless of watering state so replacing original code with a call to see if a station is active. 
+    
+    // "CurrentIrrigationStateRequest": {"command": "48", "response": "C8", "length": 1},
     response = SendData ("48", 1)
 
     //	"C8": {"length": 2, "type": "CurrentIrrigationStateResponse", "irrigationState": {"position": 2, "length": 2}},
 	if (response.result.data.reverse().endsWith("8C")) {
        def currentIrrigationState = Integer.parseInt(response.result.data.substring(2,4),16)
        log.debug "currentIrrigationState: ${currentIrrigationState}"  
+        
+       state.watering = currentIrrigationState                                   
+       sendEvent(name: "watering", value: state.watering, displayed: true)
     }
     else {
        log.debug "CurrentIrrigationStateRequest Fail: ${response.result.data}"
-    }
+    } */
+    
+    CurrentStationsActiveRequest()
+    
 }
- 
-
 
 def AdvanceStationRequest (_station) {
     //	"AdvanceStationRequest": {"command": "42", "parameter": 0, "response": "01", "length": 2},
-    _station=_station.toString()
-    if (_station.isNumber()) {
-        _station = Integer.parseInt(_station)
-       
-       if (_station < 16) {
-           _station="000"+Integer.toHexString(_station)
-       }
-       else {
-       _station="00${_station}"
-        
-       }
-       log.debug "_stationHex ${_stationHex}"
-       log.debug "sending: 42${_stationHex}"
-       response = SendData ("42${_stationHex}", 2)
-	   // "01": {"length": 2, "type": "AcknowledgeResponse", "commandEcho": {"position": 2, "length": 2}},
-
-       if (response.result.data.reverse().endsWith("10")) {
-       }
-       else {
-          log.debug "AdvanceStationRequest Fail: ${response.result.data}"
-       }
+    if (_station == null){
+        _station = 0
     }
-    else {
-       log.debug "Invalid Station: ${_station}"
+    _stationHex = convert(_station)
+    if (_stationHex == false) {
+       log.debug "AdvanceStationRequest - Invalid Station: ${_station}"
        return false 
     }
-}
-
-def AvailableStationsRequest (_station) {
-   //AvailableStationsRequest" : {"command" : "03", "parameter" : 0, "response": "83", "length" : 2}
     
-   //  "83" : {"length" : 6, "type" : "AvailableStationsResponse", "pageNumber" : {"position" : 2, "length" : 2}, "setStations" : {"position" : 4, "length" : 8}}
- 
+    log.debug "AdvanceStationRequest - _stationHex: ${_stationHex}"
+    log.debug "AdvanceStationRequest - sending: 42${_stationHex}"
+    response = SendData ("42${_stationHex}", 2)
+    // "01": {"length": 2, "type": "AcknowledgeResponse", "commandEcho": {"position": 2, "length": 2}},
+
+    if (response.result.data.reverse().endsWith("10")) {
+    }
+    else {
+       log.debug "AdvanceStationRequest Fail: ${response.result.data}"
+    }
 }
 
 def ManuallyRunStationRequest (_station, _minutes) {
     // "ManuallyRunStationRequest" : {"command" : "39", "parameterOne" : 0, "parameterTwo" : 0, "response" : "01", "length" : 4},
     
-    _station=_station.toString()
-    if (_station.isNumber()) {
-        _station = Integer.parseInt(_station)
-       
-       if (_station < 16) {
-           _stationHex="000"+Integer.toHexString(_station)
-       }
-       else {
-       _stationHex="00${_station}" 
-       }
+    if (_station == null){
+        _station = 0
     }
-    else {
-       log.debug "Invalid Station: ${_station}"
+    _stationHex = convert(_station)
+    if (_stationHex == false) {
+       log.debug "ManuallyRunStationRequest - Invalid Station: ${_station}"
        return false 
     }
         
@@ -356,30 +413,55 @@ def ManuallyRunStationRequest (_station, _minutes) {
        }
        else {
             if (_minutes>100) {
-               log.debug "Invalid Minutes: ${_station} - Must be <=100"
+               log.debug "ManuallyRunStationRequest - Invalid Minutes: ${_station} - Must be <=100"
                return false 
            }
         _minutesHex="${_minutes}"
        }
     }
     else {
-      log.debug "Invalid Minutes: ${_minutes}"
+      log.debug "ManuallyRunStationRequest - Invalid Minutes: ${_minutes}"
        return false 
    }     
         
-       log.debug "_stationHex ${_stationHex}"
-       log.debug "_minutesHex ${_minutesHex}"
-       log.debug "sending: 39${_stationHex}${_minutesHex}"
-       response = SendData ("39${_stationHex}${_minutesHex}", 4)
-	   // "01": {"length": 2, "type": "AcknowledgeResponse", "commandEcho": {"position": 2, "length": 2}},
+    if (isdebug) {log.debug "ManuallyRunStationRequest - _stationHex: ${_stationHex}"}
+    if (isdebug) {log.debug "ManuallyRunStationRequest - _minutesHex: ${_minutesHex}"}
+    if (isdebug) {log.debug "ManuallyRunStationRequest - sending: 39${_stationHex}${_minutesHex}"}
+    
+    response = SendData ("39${_stationHex}${_minutesHex}", 4)
+	// "01": {"length": 2, "type": "AcknowledgeResponse", "commandEcho": {"position": 2, "length": 2}},
 
-       if (response.result.data.reverse().endsWith("10")) {
-       }
-      else {
+    if (response.result.data.reverse().endsWith("10")) {
+    }
+    else {
        log.debug "ManuallyRunStationRequest Fail: ${response.result.data}"
+    }
+}
+
+def ManuallyRunProgramRequest (_program) {
+	//	"ManuallyRunProgramRequest": {"command": "38", "parameter": 0, "response": "01", "length": 2},
+    if (isDebug) {log.debug "Entering ManuallyRunProgramRequest"} 
+    
+    if (_program == null){
+        _program = 0
+    }
+    _programHex = convert(_program)
+    if (_programHex == false) {
+       log.debug "ManuallyRunProgramRequest - Invalid program: ${_program}"
+       return false 
+    }
+        
+    if (isDebug) {log.debug "ManuallyRunProgramRequest - _programHex: ${_programHex}"}
+    if (isDebug) { log.debug "ManuallyRunProgramRequest - sending: 39${_programHex}"}
+    response = SendData ("38${_programHex}", 2)
+    //"01": {"length": 2, "type": "AcknowledgeResponse", "commandEcho": {"position": 2, "length": 2}},
+
+    if (response.result.data.reverse().endsWith("10")) {
+       }
+    else {
+       log.debug "ManuallyRunProgramRequest Fail: ${response.result.data}"
      }
    }
-//}
 
 def SendData(strSendCommand, intLength) {
     long request_id = Math.floor((new Date()).getTime()/1000);
@@ -390,7 +472,7 @@ def SendData(strSendCommand, intLength) {
     strSendData = /{"id":$request_id,"jsonrpc":"2.0","method":"tunnelSip","params":{"data":$strSendCommand,"length":$intLength}}/
  
     byte [] baEncryptedSendData = encrypt (strSendData, SprinklerPassword)
-    if (isDebug) { log.debug "encrypt return = " + baEncryptedSendData.encodeHex().toString() }  
+    // if (isDebug) { log.debug "encrypt return = " + baEncryptedSendData.encodeHex().toString() }  
     
      def postParams = [
 		uri: "http://$SprinklerIP/stick",
@@ -410,9 +492,9 @@ def SendData(strSendCommand, intLength) {
         responseBytes = resp.data.bytes
             
          if (isDebug) {
-             log.debug "Response Status: ${resp.status}"
-             log.debug "Received Headers: ${resp.getAllHeaders()}"
-             log.debug "Response Result: ${responseBytes.encodeHex().toString()}"
+            // log.debug "Response Status: ${resp.status}"
+            // log.debug "Received Headers: ${resp.getAllHeaders()}"
+            // log.debug "Response Result: ${responseBytes.encodeHex().toString()}"
          }
           
        }
@@ -515,7 +597,6 @@ def add_padding(data) {
    return _data + pad_string
 }   
 
-
 def giveMeKey(length){
     String alphabet = (('A'..'N')+('P'..'Z')+('a'..'k')+('m'..'z')+('2'..'9')).join() 
     key = new Random().with {
@@ -531,3 +612,73 @@ private sendEventPublish(evt)	{
 	if (pub)		sendEvent(name: evt.name, value: evt.value, descriptionText: evt.descriptionText, unit: evt.unit, displayed: evt.displayed);
     if (isDebug) { log.debug pub }
 }
+
+def convert(_value) {
+ 
+    _value=_value.toString()
+    if (_value.isNumber()) {
+        _value = Integer.parseInt(_value)
+       
+       if (_value < 16) {
+           _valueHex="000"+Integer.toHexString(_value)
+       }
+       else {
+       _valueHex="00${_value}" 
+       }
+    return _valueHex
+    }
+    else {
+       log.debug "Convert - Invalid value: ${_value}"
+       return false 
+    }
+}
+
+
+/* "ControllerCommands":
+	{
+		"ModelAndVersionRequest": {"command": "02", "response": "82", "length": 1},
+		"AvailableStationsRequest": {"command": "03", "parameter": 0, "response": "83", "length": 2},
+		"CommandSupportRequest": {"command": "04", "commandToTest": "02", "response": "84", "length": 2},
+		"SerialNumberRequest": {"command": "05", "response": "85", "length": 1},
+		"CurrentTimeRequest": {"command": "10", "response": "90", "length": 1},
+		"CurrentDateRequest": {"command": "12", "response": "92", "length": 1},
+		"WaterBudgetRequest": {"command": "30", "parameter": 0, "response": "B0", "length": 2},
+		"ZonesSeasonalAdjustFactorRequest": {"command": "32", "parameter": 0, "response": "B2", "length": 2},
+		"CurrentRainSensorStateRequest": {"command": "3E", "response": "BE", "length": 1},
+		"CurrentStationsActiveRequest": {"command": "3F", "parameter": 0, "response": "BF", "length": 2},
+		"ManuallyRunProgramRequest": {"command": "38", "parameter": 0, "response": "01", "length": 2},
+		"ManuallyRunStationRequest": {"command": "39", "parameterOne": 0, "parameterTwo": 0, "response": "01", "length": 4},
+		"TestStationsRequest": {"command": "3A", "parameter": 0, "response": "01", "length": 2},
+		"StopIrrigationRequest": {"command": "40", "response": "01", "length": 1},
+		"RainDelayGetRequest": {"command": "36", "response": "B6", "length": 1},
+		"RainDelaySetRequest": {"command": "37", "parameter": 0, "response": "01", "length": 3},
+		"AdvanceStationRequest": {"command": "42", "parameter": 0, "response": "01", "length": 2},
+		"CurrentIrrigationStateRequest": {"command": "48", "response": "C8", "length": 1},
+		"CurrentControllerStateSet": {"command": "49", "parameter": 0, "response": "01", "length": 2},
+		"ControllerEventTimestampRequest": {"command": "4A","parameter": 0, "response": "CA", "length": 2},
+		"StackManuallyRunStationRequest": {"command": "4B","parameter": 0, "parameterTwo": 0,"parameterThree": 0,"response": "01", "length": 4},
+		"CombinedControllerStateRequest": {"command": "4C", "response": "CC","length": 1 }
+	},
+	"ControllerResponses":
+	{
+		"00": {"length": 3, "type": "NotAcknowledgeResponse", "commandEcho": {"position": 2, "length": 2}, "NAKCode": {"position": 4, "length": 2}},
+		"01": {"length": 2, "type": "AcknowledgeResponse", "commandEcho": {"position": 2, "length": 2}},
+		"82": {"length": 5, "type": "ModelAndVersionResponse", "modelID": {"position": 2, "length": 4},"protocolRevisionMajor": {"position": 6, "length": 2},"protocolRevisionMinor": {"position": 8, "length": 2}},
+		"83": {"length": 6, "type": "AvailableStationsResponse", "pageNumber": {"position": 2, "length": 2}, "setStations": {"position": 4, "length": 8}},
+		"84": {"length": 3,"type": "CommandSupportResponse", "commandEcho": {"position": 2, "length": 2}, "support": {"position": 4, "length": 2}},
+		"85": {"length": 9, "type": "SerialNumberResponse", "serialNumber": {"position": 2, "length": 16}},
+		"90": {"length": 4, "type": "CurrentTimeResponse", "hour": {"position": 2, "length": 2}, "minute": {"position": 4, "length": 2}, "second": {"position": 6, "length": 2}},
+		"92": {"length": 4, "type": "CurrentDateResponse", "day": {"position": 2, "length": 2}, "month": {"position": 4, "length": 1}, "year": {"position": 5, "length": 3}},
+		"B0": {"length": 4, "type": "WaterBudgetResponse", "programCode": {"position": 2, "length": 2}, "seasonalAdjust": {"position": 4, "length": 4}},
+		"B2": {"length": 18, "type": "ZonesSeasonalAdjustFactorResponse", "programCode": {"position": 2, "length": 2},"stationsSA": {"position": 4, "length": 32}},
+		"BE": {"length": 2, "type": "CurrentRainSensorStateResponse", "sensorState": {"position": 2, "length": 2}},
+		"BF": {"length": 6, "type": "CurrentStationsActiveResponse", "pageNumber": {"position": 2, "length": 2}, "activeStations": {"position": 4, "length": 8}},
+		"B6": {"length": 3, "type": "RainDelaySettingResponse", "delaySetting": {"position": 2, "length": 4}},
+		"C8": {"length": 2, "type": "CurrentIrrigationStateResponse", "irrigationState": {"position": 2, "length": 2}},
+		"CA": {"length": 6, "type": "ControllerEventTimestampResponse", "eventId": {"position": 2, "length": 2},"timestamp": {"position": 4, "length": 8}},
+		"CC": {"length": 16, "type": "CombinedControllerStateResponse", "hour": {"position": 2, "length": 2},"minute": {"position": 4, "length": 2},
+			"second": {"position": 6, "length": 2}, "day": {"position": 8, "length": 2},"month": {"position": 10, "length": 1},"year": {"position": 11, "length": 3},
+			"delaySetting": {"position": 14, "length": 4}, "sensorState": {"position": 18, "length": 2},"irrigationState": {"position": 20, "length": 2},
+			"seasonalAdjust": {"position": 22, "length": 4},"remainingRuntime": {"position": 26, "length": 4}, "activeStation": {"position": 30, "length": 2}}
+*/
+            
