@@ -406,7 +406,7 @@ def ManuallyRunStationRequest (_station, _minutes) {
         _minutes = Integer.parseInt(_minutes)
        
        if (_minutes < 16) {
-           _minutesHex="0"+Integer.toHexString(_station)
+           _minutesHex="0"+Integer.toHexString(_minutes)
        }
        else {
             if (_minutes>100) {
